@@ -1,8 +1,14 @@
-# Merge Floor Session audio to silenced Translator Session
+# Record Audio and Video of a stream to mp4 / mp3 using ffmpeg
+We connect to a session and then open two pipes to ffmpeg instances for processing raw audio and video
 
-A sample where this application connects to two sessions, one designated as Floor, the other as Translator. This sample records both the audio into floor_audio.pcm and translator_audio.pcm. When the translator has no audio (all muted) the floor audio will be recorded in the translator_audio.pcm. 
-It implements a simple video call application with several clients.
+1. We initialize ffmpeg for video with 30fps and ffmpeg for audio with 48KHz, 16-bit, stereo
+2. In on_subscriber_render_frame method, we check if the frame rate is droppig below and if yes, then insert a duplicate frame.
+3. In on_subscriber_audio_data, we check if the sample rate is more than 48KHz and if yes, we drop a audio frame.
+4. In the end we merge audio.mp3 and video_floor.mp4 using the following command
 
+```bash
+ffmpeg -i video_floor.mp4 -i audio.mp3 -c:v copy -c:a aac output.mp4
+``` 
 
 You will need a valid [Vonage Video API](https://tokbox.com/developer/)
 account to build this app. (Note that OpenTok is now the Vonage Video API.)
@@ -40,8 +46,8 @@ and extract it and set the `LIBOPENTOK_PATH` environment variable to point to th
 For example:
 
 ```bash
-wget https://tokbox.com/downloads/libopentok_linux_llvm_x86_64-2.19.1
-tar xvf libopentok_linux_llvm_x86_64-2.19.1
+wget https://tokbox.com/downloads/libopentok_linux_llvm_x86_64-2.24.1
+tar xvf libopentok_linux_llvm_x86_64-2.24.1
 export LIBOPENTOK_PATH=<path_to_SDK>
 ```
 
@@ -71,7 +77,7 @@ in the project directory:
 
 
 Copy the [config-sample.h](onfig-sample.h) file as `config.h` at
-`vonage-audio-merge-sample/`:
+`linux-av-recorder/`:
 
 ```bash
 $ cp config-sample.h config.h
@@ -110,30 +116,4 @@ You can use the [OpenTok Playground](https://tokbox.com/developer/tools/playgrou
 to connect to the OpenTok session in a web browser. This application will only be subscribers and listen to the audio
 
 You can end the sample application by typing Control + C in the console.
-
-## What does this project do
-
-The code basically connects to two sessions and listens for audio. The magic happens at the ```on_subscriber_audio_data``` event (main.cpp, line 103).
-Here we which audio data we are getting. If we get audio data from translator session and detect that the audio is muted, we will change a state variable
-`translator_has_audio` to false. Otherwise write floor audio to `translator_audio.pcm` file and set `translator_has_audio` to true.
-
-If we get audio data from Floor Session, we write it to the `floor_audio.pcm` file. We also check if `translator_has_audio` variable is false.
-If it is, we write the floor audio to the `translator_audio.pcm` as well.
-
-## Expanding the Project
-
-- Adding options to specify number of sessions and inputs for API_KEY, SESSION_ID and TOKEN for each of those should be the next step.
-- Initializing a file for each of those sessions and adding them into an struct containing the audio file and session id
-- Initalizing each session connections (loop through the struct array)
-- ```on_subscriber_audio_data``` should check for each member of the array and apply the translator muted logic to each translator found
-
-## Sample Audio
-
-There is a floor_audio.pcm and a translator_audio.pcm sample inside /sample_audio_output
-Note that these are raw PCM files, when opening, use an audio editor like Audacity to set these parameters
-Sample Rate: 48000Hz
-Channels:2 
-Bit Depth: 16-bit
-Encoding: PCM/Raw
-Byte Order: Little endian
 
