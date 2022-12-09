@@ -2,9 +2,10 @@
 We connect to a session and then open two pipes to ffmpeg instances for processing raw audio and video
 
 1. We initialize ffmpeg for video with 320x240 at 30fps and ffmpeg for audio with 48KHz, 16-bit, stereo
-2. In on_subscriber_render_frame method, we check if the frame rate is droppig below 30 and if yes, then insert a duplicate frame.
-3. In on_subscriber_audio_data, we check if the sample rate is more than 48KHz and if yes, we drop a audio frame.
-4. In the end we merge audio.mp3 and video_floor.mp4 using the following command
+2. we use custom audio driver interface provided by Vonage Video SDK
+3. In on_subscriber_render_frame method, we check if the frame rate is droppig below 30 and if yes, then insert a duplicate frame.
+4. In on_subscriber_audio_data, we check if the sample rate is less than 48KHz and if yes, we insert a duplicate audio frame.
+5. In the end we merge audio.mp3 and video_floor.mp4 using the following command
 
 ```bash
 ffmpeg -i video_floor.mp4 -i audio.mp3 -c:v copy -c:a aac output.mp4

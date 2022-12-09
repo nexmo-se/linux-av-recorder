@@ -31,6 +31,7 @@ char *video_ouput_name = "video_floor.mp4";
 char v_command[256];
 char a_command[256];
 std::chrono::time_point<std::chrono::steady_clock> start_time;
+auto prev_timestamp=std::chrono::high_resolution_clock::now();
 bool translator_has_audio = true;
 otk_thread_t audio_thread;
 otk_thread_t video_thread;
@@ -40,7 +41,7 @@ int64_t begin_time=0;
 struct audio_device {
   otc_audio_device_callbacks audio_device_callbacks;
   otk_thread_t renderer_thread;
-  std::atomic<bool> renderer_thread_exit;
+  bool renderer_thread_exit;
 };
 
 struct temp_audio {
@@ -105,10 +106,16 @@ static otk_thread_func_return_type renderer_thread_start_function(void *arg) {
     otk_thread_func_return_value;
   }
 
-  while (device->renderer_thread_exit.load() == false) {
+  while (device->renderer_thread_exit == false) {
   	int16_t samples[160];
-    size_t actual = otc_audio_device_read_render_data(samples,160);
-	  usleep(10*1000);
+        size_t actual = otc_audio_device_read_render_data(samples,160);
+	auto elapsed = std::chrono::high_resolution_clock::now() - prev_timestamp;
+	long micros = std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
+	//printf("micros %ld\n",micros);
+	if(micros < 10000){
+		usleep(10*1000-micros);
+	}
+	prev_timestamp = std::chrono::high_resolution_clock::now();
   }
 
   otk_thread_func_return_value;
@@ -151,8 +158,8 @@ static otc_bool audio_device_get_render_settings(const otc_audio_device *audio_d
     return OTC_FALSE;
   }
 
-  settings->number_of_channels = 2;
-  settings->sampling_rate = 48000;
+  settings->number_of_channels = 1;
+  settings->sampling_rate = 16000;
   return OTC_TRUE;
 }
 
@@ -187,7 +194,7 @@ static void on_subscriber_render_frame(otc_subscriber *subscriber,
   if(frame_rate < 30.00){
   	video_queue.push(otc_video_frame_copy(frame));
   	frame_count++;
-	//printf("adding frame. fps=%f\n",frame_rate);
+	printf("adding frame. fps=%f\n",frame_rate);
   }
   //else if(frame_rate > 30.00){
 	 //printf("dropping frame. fps=%f\n",frame_rate);
@@ -224,9 +231,17 @@ static void on_subscriber_audio_data(otc_subscriber* subscriber,
   int64_t cur_time = duration_cast< std::chrono::milliseconds >(std::chrono::system_clock::now().time_since_epoch()).count();
   float cur_sample_rate = ((float)sample_count/(float)(cur_time - audio_start_time))*480*1000;
   //printf("%f\n",cur_sample_rate);
-  if(cur_sample_rate > 48000){
-	  printf("skipping audio \n");
-	  return;
+  if(cur_sample_rate < 48000){
+	  printf("adding  audio \n");
+	 struct temp_audio * audio_copy = (struct temp_audio *) malloc(sizeof(struct temp_audio));
+  audio_copy->sample_rate = audio_data->sample_rate;
+  audio_copy->number_of_samples = audio_data->number_of_samples;
+  audio_copy->sample_buffer = (void*)malloc(audio_data->number_of_samples*sizeof(uint16_t)*2);
+  memcpy((audio_copy->sample_buffer),(audio_data->sample_buffer),audio_data->number_of_samples*sizeof(uint16_t)*2);
+  audio_queue.push(audio_copy);
+  sample_count++;
+
+	 // return;
   }
   if(audio_start_time==0){
 	audio_start_time = duration_cast< std::chrono::milliseconds >(std::chrono::system_clock::now().time_since_epoch()).count();
@@ -347,7 +362,7 @@ int main(int argc, char** argv) {
   device->audio_device_callbacks.destroy_renderer = audio_device_destroy_renderer;
   device->audio_device_callbacks.start_renderer = audio_device_start_renderer;
   device->audio_device_callbacks.get_render_settings = audio_device_get_render_settings;
-  //otc_set_audio_device(&(device->audio_device_callbacks));
+  otc_set_audio_device(&(device->audio_device_callbacks));
   
   struct otc_session_callbacks session_callbacks = {0};
   session_callbacks.on_connected = on_session_connected;
@@ -389,3 +404,4 @@ int main(int argc, char** argv) {
 
   return EXIT_SUCCESS;
 }
+
